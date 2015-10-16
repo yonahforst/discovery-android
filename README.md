@@ -27,3 +27,7 @@ public class MainActivity extends Activity implements Discovery.DiscoveryCallbac
     }
 }
 ````
+
+##Problems
+
+Can't detect iOS devices while they are in the background. This is because we are using a ScanFilter for the ServiceUUID to save battery. When an iOS app goes into the background, Apple moved all serviceUUIDs into a special 'overflow area' and our filter no longer picks them up
