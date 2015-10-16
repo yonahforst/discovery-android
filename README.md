@@ -15,7 +15,9 @@ public class MainActivity extends Activity implements Discovery.DiscoveryCallbac
     
     private Discovery mDiscovery;
     
-    public void start() {
+    //...boilerplate onCreate code...
+    
+    public void startDiscovery() {
         mDiscovery = new Discovery(getApplicationContext(), uuidStr, username, this);
     }
 
