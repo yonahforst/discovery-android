@@ -53,7 +53,7 @@ public class BLEUser {
         this.mIdentified = mIdentified;
     }
 
-    public int getRssi() {
+    public Integer getRssi() {
         return mRssi;
     }
 
