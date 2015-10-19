@@ -21,6 +21,8 @@ import android.os.Handler;
 import android.os.ParcelUuid;
 import android.util.Log;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -28,29 +30,27 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Created by Yonah on 15/10/15.
  */
 public class Discovery {
     private final static String TAG = "discovery-Discovery";
-    // Stops scanning after 5 seconds.
-    private static final long SCAN_PERIOD = 5000;
-
 
     private Context mContext;
     private String mUsername;
     private ParcelUuid mUUID;
     private Boolean mPaused;
     private Integer mUserTimeoutInterval;
-    private Integer mUpdateInterval;
+    private Integer mScanForSeconds;
+    private Integer mWaitForSeconds;
+
     private Boolean mShouldAdvertise;
     private Boolean mShouldDiscover;
     private Map<String, BLEUser> mUsersMap;
 
     private Handler mHandler;
-    private Runnable mRunnable;
-    private Boolean mTimerIsRunning;
 
     private DiscoveryCallback mDiscoveryCallback;
 
@@ -72,12 +72,14 @@ public class Discovery {
     private AdvertiseCallback mAdvertiseCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
-            Log.i(TAG, "LE Advertise Started.");
+            Log.w(TAG, "LE Advertise Started.");
+            super.onStartSuccess(settingsInEffect);
         }
 
         @Override
         public void onStartFailure(int errorCode) {
             Log.w(TAG, "LE Advertise Failed: " + errorCode);
+            super.onStartFailure(errorCode);
         }
     };
     private ScanCallback mScanCallback = new ScanCallback() {
@@ -85,6 +87,7 @@ public class Discovery {
         public void onScanResult(int callbackType, ScanResult result) {
             Log.w(TAG, "ScanCallback result callbackType: " + callbackType);
             scanResult(callbackType, result);
+            super.onScanResult(callbackType, result);
         }
     };
 
@@ -117,14 +120,19 @@ public class Discovery {
     }
 
     public Discovery(Context context, ParcelUuid uuid, String username, DIStartOptions startOptions, DiscoveryCallback discoveryCallback ) {
+        mShouldAdvertise = false;
+        mShouldDiscover = false;
+
         this.setContext(context);
         this.setUUID(uuid);
         this.setUsername(username);
 
         this.setPaused(false);
 
-        this.setUserTimeoutInterval(3);
-        this.setUpdateInterval(2);
+
+        this.setUserTimeoutInterval(5);
+        this.setScanForSeconds(5);
+        this.setWaitForSeconds(5);
 
         this.setDiscoveryCallback(discoveryCallback);
 
@@ -172,38 +180,41 @@ public class Discovery {
 //    }
 //
 
-    public void startTimer() {
-        if (mHandler == null)
-            mHandler = new Handler();
+    public void startScanForAFewSeconds() {
+        if (!getShouldDiscover())
+            return;
 
-        if (mRunnable == null) {
-            mRunnable = new Runnable() {
+        startDetecting();
+
+        Runnable runable = new Runnable() {
                 @Override
                 public void run() {
+                    stopScanForAFewSeconds();
                     checkList();
-                    mHandler.postDelayed(this, getUpdateInterval());
                 }
             };
-        }
-        mHandler.post(mRunnable);
-
-        mTimerIsRunning = true;
+        getHandler().postDelayed(runable, getScanForSeconds() * 1000);
     }
 
-    public void stopTimer() {
-        if (mHandler != null && mRunnable != null)
-            mHandler.removeCallbacks(mRunnable);
+    public void stopScanForAFewSeconds() {
+        if (mBluetoothLeScanner != null)
+            mBluetoothLeScanner.stopScan(mScanCallback);
 
-        mTimerIsRunning = false;
+        Runnable runable = new Runnable() {
+            @Override
+            public void run() {
+                startScanForAFewSeconds();
+            }
+        };
+        getHandler().postDelayed(runable, getWaitForSeconds() * 1000);
     }
-
 
 //TODO    - (void)appDidEnterBackground:(NSNotification *)notification {
-//        [self stopTimer];
+//        [self stopUpdateTimer];
 //    }
 //
 //TODO    - (void)appWillEnterForeground:(NSNotification *)notification {
-//        [self startTimer];
+//        [self startUpdateTimer];
 //    }
 //
 
@@ -237,9 +248,10 @@ public class Discovery {
         mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
     }
 
-    public void startDetecting() {
+    private void startDetecting() {
         if (mBluetoothLeScanner == null)
             return;
+
 
         // we only listen to the service that belongs to our uuid
         // this is important for performance and battery consumption
@@ -251,7 +263,6 @@ public class Discovery {
         // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
         // more here: https://forums.developer.apple.com/thread/11705
         filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
-//        filters.add(new ScanFilter.Builder().setm(getUUID()).build());
 
         mBluetoothLeScanner.startScan(filters, settings, mScanCallback);
     }
@@ -314,6 +325,9 @@ public class Discovery {
 
     private void checkList() {
 
+        if (getUsersMap() == null)
+            return;
+
         long currentTime = new Date().getTime();
         ArrayList<String> discardedKeys = new ArrayList<>();
 
@@ -348,6 +362,11 @@ public class Discovery {
 //    #pragma mark - CBCentralManagerDelegate
 
     public void scanResult(int callbackType, ScanResult scanResult) {
+        List <UUID> serviceUUIDs = parseUUIDs(scanResult.getScanRecord().getBytes());
+        Log.d(TAG, serviceUUIDs.toString());
+        if (serviceUUIDs == null || !serviceUUIDs.contains(getUUID().getUuid()))
+            return;
+
         String username = scanResult.getDevice().getName();
         BLEUser bleUser = userWithDeviceAddress(scanResult.getDevice().getAddress());
         if (bleUser == null) {
@@ -441,12 +460,9 @@ public class Discovery {
         this.mPaused = paused;
 
         if (paused) {
-            stopTimer();
             this.mBluetoothLeScanner.stopScan(mScanCallback);
-
         } else {
-            startTimer();
-            startDetecting();
+            startScanForAFewSeconds();
         }
     }
 
@@ -456,16 +472,6 @@ public class Discovery {
 
     public void setUserTimeoutInterval(Integer mUserTimeoutInterval) {
         this.mUserTimeoutInterval = mUserTimeoutInterval;
-    }
-
-    public Integer getUpdateInterval() {
-        return mUpdateInterval;
-    }
-
-    public void setUpdateInterval(Integer mUpdateInterval) {
-        this.mUpdateInterval = mUpdateInterval;
-        stopTimer();
-        startTimer();
     }
 
     public Boolean getShouldAdvertise() {
@@ -500,7 +506,6 @@ public class Discovery {
     }
 
     public void setShouldDiscover(Boolean shouldDiscover) {
-
         if (this.mShouldDiscover == shouldDiscover)
             return;
 
@@ -516,16 +521,12 @@ public class Discovery {
                 mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
             }
 
-            startDetecting();
-
-            if (!mTimerIsRunning)
-                startTimer();
+            startScanForAFewSeconds();
         } else {
             if (mBluetoothLeScanner != null) {
                 mBluetoothLeScanner.stopScan(mScanCallback);
+                checkList();
             }
-            if (mTimerIsRunning)
-                stopTimer();
         }
     }
 
@@ -553,4 +554,64 @@ public class Discovery {
         this.mDiscoveryCallback = mDiscoveryCallback;
     }
 
+    public Integer getScanForSeconds() {
+        return mScanForSeconds;
+    }
+
+    public void setScanForSeconds(Integer scanForSeconds) {
+        this.mScanForSeconds = scanForSeconds;
+    }
+
+    public Integer getWaitForSeconds() {
+        return mWaitForSeconds;
+    }
+
+    public void setWaitForSeconds(Integer waitForSeconds) {
+        this.mWaitForSeconds = waitForSeconds;
+    }
+
+    public Handler getHandler() {
+        if (mHandler == null) {
+            mHandler = new Handler();
+        }
+        return mHandler;
+    }
+
+    private List<UUID> parseUUIDs(byte[] advertisedData) {
+        List<UUID> uuids = new ArrayList<UUID>();
+
+        ByteBuffer buffer = ByteBuffer.wrap(advertisedData).order(ByteOrder.LITTLE_ENDIAN);
+        while (buffer.remaining() > 2) {
+            byte length = buffer.get();
+            if (length == 0) break;
+
+            byte type = buffer.get();
+            switch (type) {
+                case 0x02: // Partial list of 16-bit UUIDs
+                case 0x03: // Complete list of 16-bit UUIDs
+                    while (length >= 2) {
+                        uuids.add(UUID.fromString(String.format(
+                                "%08x-0000-1000-8000-00805f9b34fb", buffer.getShort())));
+                        length -= 2;
+                    }
+                    break;
+
+                case 0x06: // Partial list of 128-bit UUIDs
+                case 0x07: // Complete list of 128-bit UUIDs
+                    while (length >= 16) {
+                        long lsb = buffer.getLong();
+                        long msb = buffer.getLong();
+                        uuids.add(new UUID(msb, lsb));
+                        length -= 16;
+                    }
+                    break;
+
+                default:
+                    buffer.position(buffer.position() + length - 1);
+                    break;
+            }
+        }
+
+        return uuids;
+    }
 }
