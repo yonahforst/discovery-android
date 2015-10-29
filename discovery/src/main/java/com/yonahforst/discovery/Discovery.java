@@ -1,5 +1,6 @@
 package com.yonahforst.discovery;
 
+import android.annotation.TargetApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
@@ -17,6 +18,7 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.ParcelUuid;
 import android.util.Log;
@@ -35,8 +37,18 @@ import java.util.UUID;
 /**
  * Created by Yonah on 15/10/15.
  */
+@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class Discovery {
     private final static String TAG = "discovery-Discovery";
+    public interface DiscoveryCallback {
+        void didUpdateUsers(ArrayList<BLEUser> users, Boolean usersChanged);
+    }
+    public enum DIStartOptions{
+        DIStartAdvertisingAndDetecting,
+        DIStartAdvertisingOnly,
+        DIStartDetectingOnly,
+        DIStartNone
+    }
 
     private Context mContext;
     private String mUsername;
@@ -45,41 +57,39 @@ public class Discovery {
     private Integer mUserTimeoutInterval;
     private Integer mScanForSeconds;
     private Integer mWaitForSeconds;
-
     private Boolean mShouldAdvertise;
     private Boolean mShouldDiscover;
     private Map<String, BLEUser> mUsersMap;
-
     private Handler mHandler;
-
     private DiscoveryCallback mDiscoveryCallback;
-
-    public enum DIStartOptions{
-        DIStartAdvertisingAndDetecting,
-        DIStartAdvertisingOnly,
-        DIStartDetectingOnly,
-        DIStartNone
-    }
-
-    public interface DiscoveryCallback {
-        void didUpdateUsers(ArrayList<BLEUser> users, Boolean usersChanged);
-    }
-
-
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
     private BluetoothLeScanner mBluetoothLeScanner;
     private AdvertiseCallback mAdvertiseCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
-            Log.w(TAG, "LE Advertise Started.");
-            super.onStartSuccess(settingsInEffect);
+            Log.w(TAG, "Advertise Started.");
         }
 
         @Override
         public void onStartFailure(int errorCode) {
-            Log.w(TAG, "LE Advertise Failed: " + errorCode);
-            super.onStartFailure(errorCode);
+            switch (errorCode) {
+                case AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED:
+                    Log.w(TAG, "Advertise failed: already started");
+                    break;
+                case AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE:
+                    Log.w(TAG, "Advertise failed: data too large");
+                    break;
+                case AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED:
+                    Log.w(TAG, "Advertise failed: feature unsupported");
+                    break;
+                case AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR:
+                    Log.w(TAG, "Advertise failed: internal error");
+                    break;
+                case AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS:
+                    Log.w(TAG, "Advertise failed: too many advertisers");
+                    break;
+            }
         }
     };
     private ScanCallback mScanCallback = new ScanCallback() {
@@ -89,14 +99,38 @@ public class Discovery {
             scanResult(callbackType, result);
             super.onScanResult(callbackType, result);
         }
-    };
 
+        @Override
+        public void onBatchScanResults(List<ScanResult> results) {
+            Log.w(TAG, "ScanCallback batch results: " + results);
+            for (ScanResult r : results) {
+                scanResult(-1, r);
+            }
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            switch (errorCode) {
+                case ScanCallback.SCAN_FAILED_ALREADY_STARTED:
+                    Log.w(TAG, "Scan failed: already started");
+                    break;
+                case ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
+                    Log.w(TAG, "Scan failed: app registration failed");
+                    break;
+                case ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED:
+                    Log.w(TAG, "Scan failed: feature unsupported");
+                    break;
+                case ScanCallback.SCAN_FAILED_INTERNAL_ERROR:
+                    Log.w(TAG, "Scan failed: internal error");
+                    break;
+            }
+        }
+    };
     private final BluetoothGattCallback mBtleGattCallback = new BluetoothGattCallback() {
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
             Log.w(TAG, "BluetoothGattCallback characteristicChanged: " + characteristic);
-
             // this will get called anytime you perform a read or write characteristic operation
         }
 
@@ -109,7 +143,6 @@ public class Discovery {
         @Override
         public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
             Log.w(TAG, "BluetoothGattCallback serviceDiscovered. Status: " + status);
-
             servicesDiscovered(gatt, status);
         }
     };
@@ -120,22 +153,24 @@ public class Discovery {
     }
 
     public Discovery(Context context, ParcelUuid uuid, String username, DIStartOptions startOptions, DiscoveryCallback discoveryCallback ) {
+//        initialize defaults
         mShouldAdvertise = false;
         mShouldDiscover = false;
+        mPaused = false;
+        mUserTimeoutInterval = 5;
+        mScanForSeconds = 5;
+        mWaitForSeconds = 5;
+        mContext = context;
+        mUUID = uuid;
+        mUsername = username;
+        mDiscoveryCallback = discoveryCallback;
+        mUsersMap = new HashMap<>();
+        mHandler = new Handler();
 
-        this.setContext(context);
-        this.setUUID(uuid);
-        this.setUsername(username);
-
-        this.setPaused(false);
-
-
-        this.setUserTimeoutInterval(5);
-        this.setScanForSeconds(5);
-        this.setWaitForSeconds(5);
-
-        this.setDiscoveryCallback(discoveryCallback);
-
+        BluetoothManager manager = (BluetoothManager) mContext.getSystemService(Context.BLUETOOTH_SERVICE);
+        mBluetoothAdapter = manager.getAdapter();
+        mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
+        mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
 
         //TODO            // listen for UIApplicationDidEnterBackgroundNotification
 //            [[NSNotificationCenter defaultCenter] addObserver:self
@@ -150,11 +185,6 @@ public class Discovery {
 //            object:nil];
 //
 //
-
-        this.setUsersMap(new HashMap<String, BLEUser>());
-
-        this.setShouldAdvertise(false);
-        this.setShouldDiscover(false);
 
         switch (startOptions) {
             case DIStartAdvertisingAndDetecting:
@@ -180,48 +210,100 @@ public class Discovery {
 //    }
 //
 
-    public void startScanForAFewSeconds() {
-        if (!getShouldDiscover())
+    public void setPaused(Boolean paused) {
+        if (this.mPaused == paused)
+            return;
+        this.mPaused = paused;
+
+        if (paused) {
+            stopDetecting();
+            stopAdvertising();
+        } else {
+            startDetectionCycling();
+            startAdvertising();
+        }
+    }
+
+    // DETECTION METHODS
+
+    public void setShouldDiscover(Boolean shouldDiscover) {
+        if (this.mShouldDiscover == shouldDiscover)
+            return;
+
+        this.mShouldDiscover = shouldDiscover;
+
+        if (shouldDiscover) {
+            startDetectionCycling();
+        } else {
+            stopDetecting();
+            checkList();
+        }
+    }
+
+    // A more energy efficient way to detect.
+    // It detects for mScanForSeconds(default: 5) then stops for mWaitForSeconds(default: 5) then starts again.
+    // mShouldDiscover starts THIS method when set to true and stops it when set to false.
+    private void startDetectionCycling() {
+        if (!mShouldDiscover || mPaused)
             return;
 
         startDetecting();
 
         Runnable runable = new Runnable() {
-                @Override
-                public void run() {
-                    stopScanForAFewSeconds();
-                    checkList();
-                }
-            };
-        getHandler().postDelayed(runable, getScanForSeconds() * 1000);
-    }
-
-    public void stopScanForAFewSeconds() {
-        if (mBluetoothLeScanner != null)
-            mBluetoothLeScanner.stopScan(mScanCallback);
-
-        Runnable runable = new Runnable() {
             @Override
             public void run() {
-                startScanForAFewSeconds();
+                stopDetecting();
+
+                Runnable runable = new Runnable() {
+                    @Override
+                    public void run() {
+                        startDetectionCycling();
+                    }
+                };
+                mHandler.postDelayed(runable, mWaitForSeconds * 1000);
+                checkList();
             }
         };
-        getHandler().postDelayed(runable, getWaitForSeconds() * 1000);
+        mHandler.postDelayed(runable, mScanForSeconds * 1000);
     }
 
-//TODO    - (void)appDidEnterBackground:(NSNotification *)notification {
-//        [self stopUpdateTimer];
-//    }
-//
-//TODO    - (void)appWillEnterForeground:(NSNotification *)notification {
-//        [self startUpdateTimer];
-//    }
-//
+    public void startDetecting() {
+        // we only listen to the service that belongs to our uuid
+        // this is important for performance and battery consumption
+        ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build();
+        List<ScanFilter> filters = new ArrayList<>();
 
-    private void startAdvertising() {
-        if (mBluetoothLeAdvertiser == null)
+        // filtering by the ServiceUUID prevents us from discovering iOS devices broadcasting in the background
+        // since their serviceUUID gets moved into the 'overflow area'.
+        // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
+        // more here: https://forums.developer.apple.com/thread/11705
+        filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
+
+        mBluetoothLeScanner.startScan(filters, settings, mScanCallback);
+    }
+
+    public void stopDetecting(){
+        mBluetoothLeScanner.stopScan(mScanCallback);
+    }
+
+
+
+    // ADVERTISING METHODS
+
+    public void setShouldAdvertise(Boolean shouldAdvertise) {
+        if (this.mShouldAdvertise == shouldAdvertise)
             return;
 
+        this.mShouldAdvertise = shouldAdvertise;
+
+        if (shouldAdvertise) {
+            startAdvertising();
+        } else {
+            stopAdvertising();
+        }
+    }
+
+    private void startAdvertising() {
         mBluetoothAdapter.setName(getUsername());
 
         AdvertiseSettings settings = new AdvertiseSettings.Builder()
@@ -242,61 +324,17 @@ public class Discovery {
     }
 
     private void stopAdvertising() {
-        if (mBluetoothLeAdvertiser == null)
-            return;
-
         mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
     }
 
-    private void startDetecting() {
-        if (mBluetoothLeScanner == null)
-            return;
 
-
-        // we only listen to the service that belongs to our uuid
-        // this is important for performance and battery consumption
-        ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build();
-        List<ScanFilter> filters = new ArrayList<>();
-
-        // filtering by the ServiceUUID prevents us from discovering iOS devices broadcasting in the background
-        // since their serviceUUID gets moved into the 'overflow area'.
-        // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
-        // more here: https://forums.developer.apple.com/thread/11705
-        filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
-
-        mBluetoothLeScanner.startScan(filters, settings, mScanCallback);
-    }
-
-
-//
-//    - (void)peripheralManagerDidUpdateState:(CBPeripheralManager *)peripheral {
-//        if(peripheral.state == CBPeripheralManagerStatePoweredOn) {
-//            [self startAdvertising];
-//        }
-//
-//        //record the state because it's not accessible thru the peripheral manager
-//        self.peripheralManagerState = peripheral.state;
-//
-//        [self notifyOfChangedState];
-//    }
-//
-//
-//
-//    - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
-//        if (central.state == CBCentralManagerStatePoweredOn) {
-//            [self startDetecting];
-//        }
-//
-//        [self notifyOfChangedState];
-//    }
-//
-//    }
-
+    //METHODS TO PROCESS SCAN RESULTS
 
     public void updateList() {
         updateList(true);
     }
 
+    // sends an update to the delegate with an array of identified users
     public void updateList(Boolean usersChanged) {
         ArrayList<BLEUser> users = new ArrayList<>(getUsersMap().values());
 
@@ -318,11 +356,12 @@ public class Discovery {
         });
 
 
-        if (getDiscoveryCallback() != null) {
-            getDiscoveryCallback().didUpdateUsers(users, usersChanged);
+        if (mDiscoveryCallback != null) {
+            mDiscoveryCallback.didUpdateUsers(users, usersChanged);
         }
     }
 
+// removes users who haven't been seen in mUserTimeoutInterval seconds and triggers an update to the delegate
     private void checkList() {
 
         if (getUsersMap() == null)
@@ -358,14 +397,10 @@ public class Discovery {
     private BLEUser userWithDeviceAddress(String deviceAddress) {
         return getUsersMap().get(deviceAddress);
     }
-//
-//    #pragma mark - CBCentralManagerDelegate
 
     public void scanResult(int callbackType, ScanResult scanResult) {
-        List <UUID> serviceUUIDs = parseUUIDs(scanResult.getScanRecord().getBytes());
+        List <ParcelUuid> serviceUUIDs = scanResult.getScanRecord().getServiceUuids();
         Log.d(TAG, serviceUUIDs.toString());
-        if (serviceUUIDs == null || !serviceUUIDs.contains(getUUID().getUuid()))
-            return;
 
         String username = scanResult.getDevice().getName();
         BLEUser bleUser = userWithDeviceAddress(scanResult.getDevice().getAddress());
@@ -391,7 +426,7 @@ public class Discovery {
                 // nope we could not get the username from CBAdvertisementDataLocalNameKey,
                 // we have to connect to the peripheral and try to get the characteristic data
                 // add we will extract the username from characteristics.
-                scanResult.getDevice().connectGatt(getContext(), false, mBtleGattCallback);
+                scanResult.getDevice().connectGatt(mContext, false, mBtleGattCallback);
             }
         }
         bleUser.setRssi(scanResult.getRssi());
@@ -399,16 +434,13 @@ public class Discovery {
     }
 
     public void connectionStateChange(final BluetoothGatt gatt, final int status, final int newState) {
-
         // this will get called when a device connects or disconnects
         if (newState == BluetoothProfile.STATE_CONNECTED) {
             gatt.discoverServices();
         }
     }
 
-//    #pragma mark - CBPeripheralDelegate
     public void servicesDiscovered(final BluetoothGatt gatt, final int status) {
-
         // this will get called after the client initiates a BluetoothGatt.discoverServices() call
         BluetoothGattService service = gatt.getService(getUUID().getUuid());
         List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
@@ -432,149 +464,6 @@ public class Discovery {
                 }
             }
         }
-    }
-
-    public String getUsername() {
-        return mUsername;
-    }
-
-    public void setUsername(String mUsername) {
-        this.mUsername = mUsername;
-    }
-
-    public ParcelUuid getUUID() {
-        return mUUID;
-    }
-
-    public void setUUID(ParcelUuid mUUID) {
-        this.mUUID = mUUID;
-    }
-
-    public Boolean getPaused() {
-        return mPaused;
-    }
-
-    public void setPaused(Boolean paused) {
-        if (this.mPaused == paused)
-            return;
-        this.mPaused = paused;
-
-        if (paused) {
-            this.mBluetoothLeScanner.stopScan(mScanCallback);
-        } else {
-            startScanForAFewSeconds();
-        }
-    }
-
-    public Integer getUserTimeoutInterval() {
-        return mUserTimeoutInterval;
-    }
-
-    public void setUserTimeoutInterval(Integer mUserTimeoutInterval) {
-        this.mUserTimeoutInterval = mUserTimeoutInterval;
-    }
-
-    public Boolean getShouldAdvertise() {
-        return mShouldAdvertise;
-    }
-
-    public void setShouldAdvertise(Boolean shouldAdvertise) {
-        if (this.mShouldAdvertise == shouldAdvertise)
-            return;
-
-        this.mShouldAdvertise = shouldAdvertise;
-
-        if (shouldAdvertise) {
-            if (mBluetoothAdapter == null) {
-                BluetoothManager manager = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
-                mBluetoothAdapter = manager.getAdapter();
-            }
-
-            if (mBluetoothLeAdvertiser == null) {
-                mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
-            }
-            startAdvertising();
-        } else {
-            if (mBluetoothLeAdvertiser != null) {
-                mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
-            }
-        }
-    }
-
-    public Boolean getShouldDiscover() {
-        return mShouldDiscover;
-    }
-
-    public void setShouldDiscover(Boolean shouldDiscover) {
-        if (this.mShouldDiscover == shouldDiscover)
-            return;
-
-        this.mShouldDiscover = shouldDiscover;
-
-        if (shouldDiscover) {
-            if (mBluetoothAdapter == null) {
-                BluetoothManager manager = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
-                mBluetoothAdapter = manager.getAdapter();
-            }
-
-            if (mBluetoothLeScanner == null) {
-                mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
-            }
-
-            startScanForAFewSeconds();
-        } else {
-            if (mBluetoothLeScanner != null) {
-                mBluetoothLeScanner.stopScan(mScanCallback);
-                checkList();
-            }
-        }
-    }
-
-    public Map<String, BLEUser> getUsersMap() {
-        return mUsersMap;
-    }
-
-    public void setUsersMap(Map<String, BLEUser> mUsersMap) {
-        this.mUsersMap = mUsersMap;
-    }
-
-    public Context getContext() {
-        return mContext;
-    }
-
-    public void setContext(Context mContext) {
-        this.mContext = mContext;
-    }
-
-    public DiscoveryCallback getDiscoveryCallback() {
-        return mDiscoveryCallback;
-    }
-
-    public void setDiscoveryCallback(DiscoveryCallback mDiscoveryCallback) {
-        this.mDiscoveryCallback = mDiscoveryCallback;
-    }
-
-    public Integer getScanForSeconds() {
-        return mScanForSeconds;
-    }
-
-    public void setScanForSeconds(Integer scanForSeconds) {
-        this.mScanForSeconds = scanForSeconds;
-    }
-
-    public Integer getWaitForSeconds() {
-        return mWaitForSeconds;
-    }
-
-    public void setWaitForSeconds(Integer waitForSeconds) {
-        this.mWaitForSeconds = waitForSeconds;
-    }
-
-    public Handler getHandler() {
-        if (mHandler == null) {
-            mHandler = new Handler();
-        }
-        return mHandler;
     }
 
     private List<UUID> parseUUIDs(byte[] advertisedData) {
@@ -614,4 +503,55 @@ public class Discovery {
 
         return uuids;
     }
+
+//    GETTERS AND SETTERS
+
+    public String getUsername() {
+        return mUsername;
+    }
+
+    public ParcelUuid getUUID() {
+        return mUUID;
+    }
+
+    public Boolean getPaused() {
+        return mPaused;
+    }
+
+    public Boolean getShouldDiscover() {
+        return mShouldDiscover;
+    }
+
+    public Boolean getShouldAdvertise() {
+        return mShouldAdvertise;
+    }
+
+    public Integer getUserTimeoutInterval() {
+        return mUserTimeoutInterval;
+    }
+
+    public void setUserTimeoutInterval(Integer mUserTimeoutInterval) {
+        this.mUserTimeoutInterval = mUserTimeoutInterval;
+    }
+
+    public Map<String, BLEUser> getUsersMap() {
+        return mUsersMap;
+    }
+
+    public Integer getScanForSeconds() {
+        return mScanForSeconds;
+    }
+
+    public void setScanForSeconds(Integer scanForSeconds) {
+        this.mScanForSeconds = scanForSeconds;
+    }
+
+    public Integer getWaitForSeconds() {
+        return mWaitForSeconds;
+    }
+
+    public void setWaitForSeconds(Integer waitForSeconds) {
+        this.mWaitForSeconds = waitForSeconds;
+    }
+
 }
