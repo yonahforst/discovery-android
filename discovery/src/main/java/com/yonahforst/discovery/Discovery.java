@@ -376,7 +376,7 @@ public class Discovery {
 
             // We remove the user if we haven't seen him for the userTimeInterval amount of seconds.
             // You can simply set the userTimeInterval variable anything you want.
-            if (diff > getUserTimeoutInterval()) {
+            if (diff > getUserTimeoutInterval() * 1000) {
                 discardedKeys.add(key);
             }
         }
