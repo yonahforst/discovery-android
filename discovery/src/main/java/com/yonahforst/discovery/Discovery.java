@@ -65,6 +65,9 @@ public class Discovery {
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
     private BluetoothLeScanner mBluetoothLeScanner;
+    private AdvertiseSettings mAdvertiseSettings;
+    private AdvertiseData mAdvertiseData;
+
     private AdvertiseCallback mAdvertiseCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
@@ -268,7 +271,10 @@ public class Discovery {
     }
 
     public void startDetecting() {
-        // we only listen to the service that belongs to our uuid
+        if (!mBluetoothAdapter.isEnabled())
+            return;
+
+            // we only listen to the service that belongs to our uuid
         // this is important for performance and battery consumption
         ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build();
         List<ScanFilter> filters = new ArrayList<>();
@@ -283,6 +289,9 @@ public class Discovery {
     }
 
     public void stopDetecting(){
+        if (!mBluetoothAdapter.isEnabled())
+            return;
+
         mBluetoothLeScanner.stopScan(mScanCallback);
     }
 
@@ -304,26 +313,18 @@ public class Discovery {
     }
 
     private void startAdvertising() {
+        if (!mBluetoothAdapter.isEnabled())
+            return;
+
         mBluetoothAdapter.setName(getUsername());
 
-        AdvertiseSettings settings = new AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-                .setConnectable(true)
-                .setTimeout(0)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                .build();
-
-        AdvertiseData data = new AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
-                .setIncludeTxPowerLevel(false)
-                .addServiceUuid(getUUID())
-                .build();
-
         //// We dont need to add characteristics because android will display our username even in the backgound.
-        mBluetoothLeAdvertiser.startAdvertising(settings, data, mAdvertiseCallback);
+        mBluetoothLeAdvertiser.startAdvertising(getAdvertiseSettings(), getAdvertiseData(), mAdvertiseCallback);
     }
 
     private void stopAdvertising() {
+        if (!mBluetoothAdapter.isEnabled())
+            return;
         mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
     }
 
@@ -351,6 +352,8 @@ public class Discovery {
         // so the client will receive ordered users according to the proximity.
         Collections.sort(users, new Comparator<BLEUser>() {
             public int compare(BLEUser s1, BLEUser s2) {
+                if (s1.getProximity() == null || s2.getProximity() == null)
+                    return 0;
                 return s1.getProximity().compareTo(s2.getProximity());
             }
         });
@@ -552,6 +555,29 @@ public class Discovery {
 
     public void setWaitForSeconds(Integer waitForSeconds) {
         this.mWaitForSeconds = waitForSeconds;
+    }
+
+    public AdvertiseSettings getAdvertiseSettings() {
+        if (mAdvertiseSettings == null ) {
+            mAdvertiseSettings = new AdvertiseSettings.Builder()
+                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+                    .setConnectable(true)
+                    .setTimeout(0)
+                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                    .build();
+        }
+        return mAdvertiseSettings;
+    }
+
+    public AdvertiseData getAdvertiseData() {
+        if (mAdvertiseData == null) {
+            mAdvertiseData  = new AdvertiseData.Builder()
+                    .setIncludeDeviceName(true)
+                    .setIncludeTxPowerLevel(false)
+                    .addServiceUuid(getUUID())
+                    .build();
+        }
+        return mAdvertiseData;
     }
 
 }
