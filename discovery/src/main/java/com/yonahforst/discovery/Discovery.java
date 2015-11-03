@@ -2,6 +2,7 @@ package com.yonahforst.discovery;
 
 import android.annotation.TargetApi;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
@@ -15,6 +16,7 @@ import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
@@ -37,7 +39,7 @@ import java.util.UUID;
 /**
  * Created by Yonah on 15/10/15.
  */
-@TargetApi(Build.VERSION_CODES.LOLLIPOP)
+@TargetApi(Build.VERSION_CODES.KITKAT)
 public class Discovery {
     private final static String TAG = "discovery-Discovery";
     public interface DiscoveryCallback {
@@ -67,68 +69,10 @@ public class Discovery {
     private BluetoothLeScanner mBluetoothLeScanner;
     private AdvertiseSettings mAdvertiseSettings;
     private AdvertiseData mAdvertiseData;
+    private AdvertiseCallback mAdvertiseCallback;
+    private ScanCallback mScanCallback;
+    private BluetoothAdapter.LeScanCallback mLeScanCallback;
 
-    private AdvertiseCallback mAdvertiseCallback = new AdvertiseCallback() {
-        @Override
-        public void onStartSuccess(AdvertiseSettings settingsInEffect) {
-            Log.w(TAG, "Advertise Started.");
-        }
-
-        @Override
-        public void onStartFailure(int errorCode) {
-            switch (errorCode) {
-                case AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED:
-                    Log.w(TAG, "Advertise failed: already started");
-                    break;
-                case AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE:
-                    Log.w(TAG, "Advertise failed: data too large");
-                    break;
-                case AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED:
-                    Log.w(TAG, "Advertise failed: feature unsupported");
-                    break;
-                case AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR:
-                    Log.w(TAG, "Advertise failed: internal error");
-                    break;
-                case AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS:
-                    Log.w(TAG, "Advertise failed: too many advertisers");
-                    break;
-            }
-        }
-    };
-    private ScanCallback mScanCallback = new ScanCallback() {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            Log.w(TAG, "ScanCallback result callbackType: " + callbackType);
-            scanResult(callbackType, result);
-            super.onScanResult(callbackType, result);
-        }
-
-        @Override
-        public void onBatchScanResults(List<ScanResult> results) {
-            Log.w(TAG, "ScanCallback batch results: " + results);
-            for (ScanResult r : results) {
-                scanResult(-1, r);
-            }
-        }
-
-        @Override
-        public void onScanFailed(int errorCode) {
-            switch (errorCode) {
-                case ScanCallback.SCAN_FAILED_ALREADY_STARTED:
-                    Log.w(TAG, "Scan failed: already started");
-                    break;
-                case ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
-                    Log.w(TAG, "Scan failed: app registration failed");
-                    break;
-                case ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED:
-                    Log.w(TAG, "Scan failed: feature unsupported");
-                    break;
-                case ScanCallback.SCAN_FAILED_INTERNAL_ERROR:
-                    Log.w(TAG, "Scan failed: internal error");
-                    break;
-            }
-        }
-    };
     private final BluetoothGattCallback mBtleGattCallback = new BluetoothGattCallback() {
 
         @Override
@@ -169,11 +113,6 @@ public class Discovery {
         mDiscoveryCallback = discoveryCallback;
         mUsersMap = new HashMap<>();
         mHandler = new Handler();
-
-        BluetoothManager manager = (BluetoothManager) mContext.getSystemService(Context.BLUETOOTH_SERVICE);
-        mBluetoothAdapter = manager.getAdapter();
-        mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
-        mBluetoothLeAdvertiser = mBluetoothAdapter.getBluetoothLeAdvertiser();
 
         //TODO            // listen for UIApplicationDidEnterBackgroundNotification
 //            [[NSNotificationCenter defaultCenter] addObserver:self
@@ -271,28 +210,38 @@ public class Discovery {
     }
 
     public void startDetecting() {
-        if (!mBluetoothAdapter.isEnabled())
+        if (!getBluetoothAdapter().isEnabled())
             return;
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+
             // we only listen to the service that belongs to our uuid
-        // this is important for performance and battery consumption
-        ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build();
-        List<ScanFilter> filters = new ArrayList<>();
+            // this is important for performance and battery consumption
+            ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build();
+            List<ScanFilter> filters = new ArrayList<>();
 
-        // filtering by the ServiceUUID prevents us from discovering iOS devices broadcasting in the background
-        // since their serviceUUID gets moved into the 'overflow area'.
-        // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
-        // more here: https://forums.developer.apple.com/thread/11705
-        filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
+            // filtering by the ServiceUUID prevents us from discovering iOS devices broadcasting in the background
+            // since their serviceUUID gets moved into the 'overflow area'.
+            // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
+            // more here: https://forums.developer.apple.com/thread/11705
+            filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
 
-        mBluetoothLeScanner.startScan(filters, settings, mScanCallback);
+            getBluetoothLeScanner().startScan(filters, settings, getScanCallback());
+        } else {
+            UUID[] serviceUUIDs = {getUUID().getUuid()};
+            getBluetoothAdapter().startLeScan(serviceUUIDs, getLeScanCallback());
+        }
     }
 
     public void stopDetecting(){
-        if (!mBluetoothAdapter.isEnabled())
+        if (!getBluetoothAdapter().isEnabled())
             return;
 
-        mBluetoothLeScanner.stopScan(mScanCallback);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getBluetoothLeScanner().stopScan(getScanCallback());
+        } else {
+            getBluetoothAdapter().stopLeScan(getLeScanCallback());
+        }
     }
 
 
@@ -302,6 +251,11 @@ public class Discovery {
     public void setShouldAdvertise(Boolean shouldAdvertise) {
         if (this.mShouldAdvertise == shouldAdvertise)
             return;
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            this.mShouldAdvertise = false;
+            return;
+        }
 
         this.mShouldAdvertise = shouldAdvertise;
 
@@ -313,19 +267,17 @@ public class Discovery {
     }
 
     private void startAdvertising() {
-        if (!mBluetoothAdapter.isEnabled())
-            return;
-
-        mBluetoothAdapter.setName(getUsername());
-
-        //// We dont need to add characteristics because android will display our username even in the backgound.
-        mBluetoothLeAdvertiser.startAdvertising(getAdvertiseSettings(), getAdvertiseData(), mAdvertiseCallback);
+        if (getBluetoothAdapter().isEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getBluetoothAdapter().setName(getUsername());
+            //// We dont need to add characteristics because android will display our username even in the backgound.
+            getBluetoothLeAdvertiser().startAdvertising(getAdvertiseSettings(), getAdvertiseData(), getAdvertiseCallback());
+        }
     }
 
     private void stopAdvertising() {
-        if (!mBluetoothAdapter.isEnabled())
-            return;
-        mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
+        if (getBluetoothAdapter().isEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getBluetoothLeAdvertiser().stopAdvertising(getAdvertiseCallback());
+        }
     }
 
 
@@ -401,14 +353,15 @@ public class Discovery {
         return getUsersMap().get(deviceAddress);
     }
 
-    public void scanResult(int callbackType, ScanResult scanResult) {
-        List <ParcelUuid> serviceUUIDs = scanResult.getScanRecord().getServiceUuids();
-        Log.d(TAG, serviceUUIDs.toString());
+    public void myOnScanResult(int callbackType, ScanResult scanResult) {
+        myOnLeScan(scanResult.getDevice(), scanResult.getRssi(), scanResult.getScanRecord().getBytes());
+    }
 
-        String username = scanResult.getDevice().getName();
-        BLEUser bleUser = userWithDeviceAddress(scanResult.getDevice().getAddress());
+    public void myOnLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
+        String username = device.getName();
+        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
         if (bleUser == null) {
-            bleUser = new BLEUser(scanResult);
+            bleUser = new BLEUser(device);
             bleUser.setUsername(null);
             bleUser.setIdentified(false);
 
@@ -429,10 +382,10 @@ public class Discovery {
                 // nope we could not get the username from CBAdvertisementDataLocalNameKey,
                 // we have to connect to the peripheral and try to get the characteristic data
                 // add we will extract the username from characteristics.
-                scanResult.getDevice().connectGatt(mContext, false, mBtleGattCallback);
+                device.connectGatt(mContext, false, mBtleGattCallback);
             }
         }
-        bleUser.setRssi(scanResult.getRssi());
+        bleUser.setRssi(rssi);
         bleUser.setUpdateTime(new Date().getTime());
     }
 
@@ -558,7 +511,7 @@ public class Discovery {
     }
 
     public AdvertiseSettings getAdvertiseSettings() {
-        if (mAdvertiseSettings == null ) {
+        if (mAdvertiseSettings == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mAdvertiseSettings = new AdvertiseSettings.Builder()
                     .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
                     .setConnectable(true)
@@ -570,7 +523,7 @@ public class Discovery {
     }
 
     public AdvertiseData getAdvertiseData() {
-        if (mAdvertiseData == null) {
+        if (mAdvertiseData == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mAdvertiseData  = new AdvertiseData.Builder()
                     .setIncludeDeviceName(true)
                     .setIncludeTxPowerLevel(false)
@@ -579,5 +532,114 @@ public class Discovery {
         }
         return mAdvertiseData;
     }
+
+    private BluetoothAdapter getBluetoothAdapter() {
+        if (mBluetoothAdapter == null) {
+            BluetoothManager manager = (BluetoothManager) mContext.getSystemService(Context.BLUETOOTH_SERVICE);
+            mBluetoothAdapter = manager.getAdapter();
+        }
+
+        return mBluetoothAdapter;
+    }
+
+    private BluetoothLeAdvertiser getBluetoothLeAdvertiser() {
+        if (mBluetoothLeAdvertiser == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mBluetoothLeAdvertiser = getBluetoothAdapter().getBluetoothLeAdvertiser();
+        }
+        return mBluetoothLeAdvertiser;
+    }
+
+    private BluetoothLeScanner getBluetoothLeScanner() {
+        if (mBluetoothLeScanner == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mBluetoothLeScanner = getBluetoothAdapter().getBluetoothLeScanner();
+        }
+        return mBluetoothLeScanner;
+    }
+
+    private AdvertiseCallback getAdvertiseCallback() {
+        if (mAdvertiseCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mAdvertiseCallback = new AdvertiseCallback() {
+                @Override
+                public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+                    Log.w(TAG, "Advertise Started.");
+                }
+
+                @Override
+                public void onStartFailure(int errorCode) {
+                    switch (errorCode) {
+                        case AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED:
+                            Log.w(TAG, "Advertise failed: already started");
+                            break;
+                        case AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE:
+                            Log.w(TAG, "Advertise failed: data too large");
+                            break;
+                        case AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED:
+                            Log.w(TAG, "Advertise failed: feature unsupported");
+                            break;
+                        case AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR:
+                            Log.w(TAG, "Advertise failed: internal error");
+                            break;
+                        case AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS:
+                            Log.w(TAG, "Advertise failed: too many advertisers");
+                            break;
+                    }
+                }
+            };
+        }
+        return mAdvertiseCallback;
+    }
+
+
+    private ScanCallback getScanCallback() {
+        if (mScanCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mScanCallback = new ScanCallback() {
+                @Override
+                public void onScanResult(int callbackType, ScanResult result) {
+                    Log.w(TAG, "ScanCallback result callbackType: " + callbackType);
+                    myOnScanResult(callbackType, result);
+                }
+
+                @Override
+                public void onBatchScanResults(List<ScanResult> results) {
+                    Log.w(TAG, "ScanCallback batch results: " + results);
+                    for (ScanResult r : results) {
+                        myOnScanResult(-1, r);
+                    }
+                }
+
+                @Override
+                public void onScanFailed(int errorCode) {
+                    switch (errorCode) {
+                        case ScanCallback.SCAN_FAILED_ALREADY_STARTED:
+                            Log.w(TAG, "Scan failed: already started");
+                            break;
+                        case ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
+                            Log.w(TAG, "Scan failed: app registration failed");
+                            break;
+                        case ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED:
+                            Log.w(TAG, "Scan failed: feature unsupported");
+                            break;
+                        case ScanCallback.SCAN_FAILED_INTERNAL_ERROR:
+                            Log.w(TAG, "Scan failed: internal error");
+                            break;
+                    }
+                }
+            };
+        }
+        return mScanCallback;
+    }
+
+    private BluetoothAdapter.LeScanCallback getLeScanCallback() {
+        if (mLeScanCallback == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
+                @Override
+                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
+                    myOnLeScan(device, rssi, scanRecord);
+                }
+            };
+        }
+        return mLeScanCallback;
+    }
+
 
 }

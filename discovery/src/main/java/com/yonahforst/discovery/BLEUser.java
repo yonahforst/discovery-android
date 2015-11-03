@@ -1,12 +1,14 @@
 package com.yonahforst.discovery;
 
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 
 /**
  * Created by Yonah on 15/10/15.
  */
 public class BLEUser {
-    private ScanResult mScanRsult;
+    private BluetoothDevice mDevice;
     private String mDeviceAddress;
     private String mUsername;
     private Boolean mIdentified;
@@ -15,10 +17,10 @@ public class BLEUser {
     private long mUpdateTime;
     private EasedValue mEasedProximity;
 
-    public BLEUser(ScanResult scanResult) {
-        this.mScanRsult = scanResult;
-        this.mDeviceAddress = mScanRsult.getDevice().getAddress();
-        this.mRssi = mScanRsult.getRssi();
+    public BLEUser(final BluetoothDevice device) {
+        this.mDevice = device;
+        this.mDeviceAddress = device.getAddress();
+        this.mRssi = 0;
         this.mEasedProximity = new EasedValue();
     }
 
