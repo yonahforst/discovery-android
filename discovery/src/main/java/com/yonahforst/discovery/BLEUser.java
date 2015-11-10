@@ -26,7 +26,7 @@ public class BLEUser {
 
     public Integer convertRSSItoProximity(Integer rssi) {
         // eased value doesn't support negative values
-        this.mEasedProximity.setValue(Math.abs(rssi) * 0.0f);//convert to float
+        this.mEasedProximity.setValue(Math.abs(rssi) * 1.0f);//convert to float
         this.mEasedProximity.update();
         Integer proximity = Math.round(this.mEasedProximity.getValue() * -1.0f);
         return proximity;
