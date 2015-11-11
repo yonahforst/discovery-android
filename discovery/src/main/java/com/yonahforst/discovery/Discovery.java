@@ -92,6 +92,13 @@ public class Discovery {
             Log.w(TAG, "BluetoothGattCallback serviceDiscovered. Status: " + status);
             servicesDiscovered(gatt, status);
         }
+
+        @Override
+        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                characteristicRead(gatt, characteristic, status);
+            }
+        }
     };
 
 
@@ -402,22 +409,28 @@ public class Discovery {
         List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
         for (BluetoothGattCharacteristic characteristic : characteristics) {
             if (characteristic.getUuid().equals(getUUID().getUuid())) {
-                String value = characteristic.getStringValue(0);
+                gatt.readCharacteristic(characteristic);
+            }
+        }
+    }
 
-                // if the value is not nil, we found our username!
-                if (value != null && value.length() > 0) {
-                    BLEUser user = userWithDeviceAddress(gatt.getDevice().getAddress());
-                    user.setUsername(value);
-                    user.setIdentified(true);
-                    updateList();
+    private void characteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+        if (characteristic.getUuid().equals(getUUID().getUuid())) {
+            String value = characteristic.getStringValue(0);
 
-                    // cancel the subscription to our characteristic
-                    gatt.setCharacteristicNotification(characteristic, false);
-                    // and disconnect from the peripehral
-                    gatt.disconnect();
-                    gatt.close();
+            // if the value is not nil, we found our username!
+            if (value != null && value.length() > 0) {
+                BLEUser user = userWithDeviceAddress(gatt.getDevice().getAddress());
+                user.setUsername(value);
+                user.setIdentified(true);
+                updateList();
 
-                }
+                // cancel the subscription to our characteristic
+                gatt.setCharacteristicNotification(characteristic, false);
+                // and disconnect from the peripehral
+                gatt.disconnect();
+                gatt.close();
+
             }
         }
     }
