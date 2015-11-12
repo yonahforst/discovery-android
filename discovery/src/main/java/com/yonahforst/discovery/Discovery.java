@@ -235,7 +235,9 @@ public class Discovery {
             // since their serviceUUID gets moved into the 'overflow area'.
             // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
             // more here: https://forums.developer.apple.com/thread/11705
-            filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
+//            filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
+            ScanFilter serviceUUIDFilter = new ScanFilter.Builder().setServiceUuid(getUUID()).build();
+            filters.add(serviceUUIDFilter);
 
             getBluetoothLeScanner().startScan(filters, settings, getScanCallback());
         } else {
