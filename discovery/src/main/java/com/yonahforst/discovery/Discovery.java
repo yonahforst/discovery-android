@@ -198,6 +198,7 @@ public class Discovery {
             return;
 
         startDetecting();
+        Log.d(TAG, "detection cycle started");
 
         if (mRunnable != null)
             mHandler.removeCallbacks(mRunnable);
@@ -206,6 +207,7 @@ public class Discovery {
             @Override
             public void run() {
                 stopDetecting();
+                Log.d(TAG, "detection cycle stopped");
 
                 Runnable runable = new Runnable() {
                     @Override
@@ -244,9 +246,12 @@ public class Discovery {
             UUID[] serviceUUIDs = {getUUID().getUuid()};
             getBluetoothAdapter().startLeScan(serviceUUIDs, getLeScanCallback());
         }
+        Log.d(TAG, "started detecting");
+
     }
 
     public void stopDetecting(){
+
         if (!getBluetoothAdapter().isEnabled())
             return;
 
@@ -255,6 +260,7 @@ public class Discovery {
         } else {
             getBluetoothAdapter().stopLeScan(getLeScanCallback());
         }
+        Log.d(TAG, "stopped detecting");
     }
 
 
@@ -285,12 +291,14 @@ public class Discovery {
             //// We dont need to add characteristics because android will display our username even in the backgound.
             getBluetoothLeAdvertiser().startAdvertising(getAdvertiseSettings(), getAdvertiseData(), getAdvertiseCallback());
         }
+        Log.d(TAG, "started advertising");
     }
 
     private void stopAdvertising() {
         if (getBluetoothAdapter().isEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             getBluetoothLeAdvertiser().stopAdvertising(getAdvertiseCallback());
         }
+        Log.d(TAG, "stopped advertising");
     }
 
 
