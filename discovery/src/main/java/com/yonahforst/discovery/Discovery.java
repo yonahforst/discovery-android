@@ -517,6 +517,7 @@ public class Discovery {
 
     public void setScanForSeconds(Integer scanForSeconds) {
         this.mScanForSeconds = scanForSeconds;
+        startDetectionCycling();
     }
 
     public Integer getWaitForSeconds() {
@@ -525,6 +526,7 @@ public class Discovery {
 
     public void setWaitForSeconds(Integer waitForSeconds) {
         this.mWaitForSeconds = waitForSeconds;
+        startDetectionCycling();
     }
 
     public AdvertiseSettings getAdvertiseSettings() {
