@@ -63,6 +63,7 @@ public class Discovery {
     private Boolean mShouldDiscover;
     private Map<String, BLEUser> mUsersMap;
     private Handler mHandler;
+    private Runnable mRunnable;
     private DiscoveryCallback mDiscoveryCallback;
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
@@ -198,7 +199,10 @@ public class Discovery {
 
         startDetecting();
 
-        Runnable runable = new Runnable() {
+        if (mRunnable != null)
+            mHandler.removeCallbacks(mRunnable);
+
+         mRunnable = new Runnable() {
             @Override
             public void run() {
                 stopDetecting();
@@ -213,7 +217,7 @@ public class Discovery {
                 checkList();
             }
         };
-        mHandler.postDelayed(runable, mScanForSeconds * 1000);
+        mHandler.postDelayed(mRunnable, mScanForSeconds * 1000);
     }
 
     public void startDetecting() {
