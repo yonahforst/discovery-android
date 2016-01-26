@@ -3,9 +3,15 @@ Android port of https://github.com/omergul123/Discovery
  
 ##Install
 
-Clone repo and add `BLEUser.java`, `Discovery.java`, and `EasedValue.java` into your android project.
-(I'm working on releasing it via gradle but it's so ducking complicated)
+Add to your bundle.gradle (module) dependencies
 
+````java
+dependencies {
+   ...
+   compile "com.joshblour.discovery:discovery:0.0.1"
+   ...
+}
+````
 ##Example usage
 
 ````java
