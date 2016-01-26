@@ -121,7 +121,7 @@ public class AdvertiserService extends Service {
 
     @Override
     public void onDestroy() {
-        Log.v(TAG, "onDestroy");
+//        Log.v(TAG, "onDestroy");
 
         /**
          * Note that onDestroy is not guaranteed to be called quickly or at all. Services exist at
@@ -194,7 +194,7 @@ public class AdvertiserService extends Service {
      * Starts BLE Advertising.
      */
     private void startAdvertising() {
-        Log.d(TAG, "Service: Starting Advertising");
+//        Log.d(TAG, "Service: Starting Advertising");
 
         if (mAdvertiseCallback == null) {
             mAdvertiseCallback = new MyAdvertiseCallback();
@@ -212,7 +212,6 @@ public class AdvertiserService extends Service {
         if (mBluetoothLeAdvertiser != null) {
             AdvertiseSettings settings = buildAdvertiseSettings();
             AdvertiseData data = buildAdvertiseData();
-            Log.e(TAG, data.toString());
             mBluetoothLeAdvertiser.startAdvertising(settings, data,
                     mAdvertiseCallback);
         }
@@ -222,7 +221,7 @@ public class AdvertiserService extends Service {
      * Stops BLE Advertising.
      */
     private void stopAdvertising() {
-        Log.d(TAG, "Service: Stopping Advertising");
+//        Log.d(TAG, "Service: Stopping Advertising");
         if (mBluetoothLeAdvertiser != null) {
             mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
             mAdvertiseCallback = null;
@@ -305,7 +304,7 @@ public class AdvertiserService extends Service {
                                                 int offset,
                                                 BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic);
-            Log.i(TAG, "onCharacteristicReadRequest " + characteristic.getUuid().toString());
+//            Log.i(TAG, "onCharacteristicReadRequest " + characteristic.getUuid().toString());
 
             if (characteristic.getUuid().equals(mUUID.getUuid())) {
                 mGattServer.sendResponse(device,
@@ -371,7 +370,7 @@ public class AdvertiserService extends Service {
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
             super.onStartSuccess(settingsInEffect);
             mRetriesAfterFailure = 0;
-            Log.d(TAG, "Advertising successfully started");
+//            Log.d(TAG, "Advertising successfully started");
         }
     }
 

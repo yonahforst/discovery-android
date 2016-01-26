@@ -170,7 +170,7 @@ public class Discovery {
             return;
 
         startDetecting();
-        Log.v(TAG, "detection cycle started");
+//        Log.v(TAG, "detection cycle started");
 
         if (mRunnable != null)
             mHandler.removeCallbacks(mRunnable);
@@ -179,7 +179,7 @@ public class Discovery {
             @Override
             public void run() {
                 stopDetecting();
-                Log.v(TAG, "detection cycle stopped");
+//                Log.v(TAG, "detection cycle stopped");
 
                 Runnable runable = new Runnable() {
                     @Override
@@ -229,7 +229,7 @@ public class Discovery {
             UUID[] serviceUUIDs = {getUUID().getUuid()};
             getBluetoothAdapter().startLeScan(serviceUUIDs, getLeScanCallback());
         }
-        Log.v(TAG, "started detecting");
+//        Log.v(TAG, "started detecting");
 
     }
 
@@ -244,7 +244,7 @@ public class Discovery {
         } else {
             getBluetoothAdapter().stopLeScan(getLeScanCallback());
         }
-        Log.v(TAG, "stopped detecting");
+//        Log.v(TAG, "stopped detecting");
     }//***END DETECTION METHODS***
 
 
@@ -278,7 +278,7 @@ public class Discovery {
             AdvertiserService.shouldAutoRestart = true;
             if (!AdvertiserService.running) {
                 mContext.startService(getAdvertiserServiceIntent(mContext));
-                Log.v(TAG, "started advertising");
+//                Log.v(TAG, "started advertising");
             }
         }
     }
@@ -287,7 +287,7 @@ public class Discovery {
         if (getBluetoothAdapter().isEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             AdvertiserService.shouldAutoRestart = false;
             mContext.stopService(getAdvertiserServiceIntent(mContext));
-            Log.v(TAG, "stopped advertising");
+//            Log.v(TAG, "stopped advertising");
         }
     }
 
@@ -381,7 +381,7 @@ public class Discovery {
     }
 
     public void myOnLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
-        Log.e(TAG, "found device with address " + device.getAddress());
+//        Log.e(TAG, "found device with address " + device.getAddress());
 
         String username = device.getName();
         BLEUser bleUser = userWithDeviceAddress(device.getAddress());
@@ -404,7 +404,7 @@ public class Discovery {
                 // we update our list for callback block
                 updateList();
             } else {
-                Log.e(TAG, "device not identified. will connect");
+//                Log.e(TAG, "device not identified. will connect");
                 // nope we could not get the username from CBAdvertisementDataLocalNameKey,
                 // we have to connect to the peripheral and try to get the characteristic data
                 // add we will extract the username from characteristics.
@@ -414,7 +414,7 @@ public class Discovery {
                 device.connectGatt(mContext, true, mBluetoothGattCallback);
             }
         } else {
-            Log.e(TAG, "device is identified");
+//            Log.e(TAG, "device is identified");
         }
         bleUser.setRssi(rssi);
         bleUser.setUpdateTime(new Date().getTime());
@@ -548,7 +548,7 @@ public class Discovery {
         public void onConnectionStateChange(final BluetoothGatt gatt, final int status, final int newState) {
             // this will get called when a device connects or disconnects
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.e(TAG, "connection state changed: state connected!");
+//                Log.e(TAG, "connection state changed: state connected!");
 
                 gatt.discoverServices();
             }
@@ -601,13 +601,13 @@ public class Discovery {
     private class MyScanCallback extends ScanCallback {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            Log.e(TAG, "ScanCallback result callbackType: " + callbackType);
+//            Log.e(TAG, "ScanCallback result callbackType: " + callbackType);
             myOnScanResult(callbackType, result);
         }
 
         @Override
         public void onBatchScanResults(List<ScanResult> results) {
-            Log.e(TAG, "ScanCallback batch results: " + results);
+//            Log.e(TAG, "ScanCallback batch results: " + results);
             for (ScanResult r : results) {
                 myOnScanResult(-1, r);
             }
