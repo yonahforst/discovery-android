@@ -15,7 +15,7 @@ Add to your bundle.gradle (module) dependencies
 ````java
 dependencies {
    //...
-   compile "com.joshblour.discovery:discovery:0.0.1"
+   compile "com.joshblour.discovery:discovery:0.0.3"
    //...
 }
 ````
