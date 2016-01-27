@@ -43,7 +43,7 @@ public class MainActivity extends Activity implements Discovery.DiscoveryCallbac
 
 ##API
 `public Discovery(Context context, ParcelUuid uuid, String username, DIStartOptions startOptions, DiscoveryCallback discoveryCallback )`
-  - `uuid`: A UUID that identifies your application. If you want to discovery iOS devices, both libraries need to be using the same UUID
+  - `uuid`: A UUID that identifies your application. If you want to discover iOS devices, both libraries need to be using the same UUID
   - `username`: The username to include in the broadcast. Note: in this implementation, we can only broadcast a max of 7 characters. You can use longer usernames but nearby devices will need to connect in order to read it. (the username is then cached so this only happens once per discovery)
   - `startOptions`:
      - DIStartAdvertisingAndDetecting
