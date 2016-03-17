@@ -12,6 +12,7 @@ public class BLEUser {
     private String mDeviceAddress;
     private String mUsername;
     private Boolean mIdentified;
+    private Boolean mIsMyService;
     private Integer mRssi;
     private Integer mProximity;
     private long mUpdateTime;
@@ -80,5 +81,14 @@ public class BLEUser {
         this.mUpdateTime = mUpdateTime;
     }
 
+    // we need this because we are not filtering by serviceUUID.
+    // with this flag, we can store them as identifed but not our service, so that we don't need to always reconnect.
+    public void setIsMyService(Boolean isMyService) {
+        this.mIsMyService = isMyService;
+    }
+
+    public Boolean isMyService() {
+        return mIsMyService;
+    }
 }
 
