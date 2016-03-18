@@ -31,16 +31,21 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Created by Yonah on 15/10/15.
  */
 @TargetApi(Build.VERSION_CODES.KITKAT)
-public class Discovery {
+public class Discovery implements MultiScanner.MultiScannerCallback, GattManager.GattManagerCallback{
     private final static String TAG = "discovery-Discovery";
+
     public interface DiscoveryCallback {
         void didUpdateUsers(ArrayList<BLEUser> users, Boolean usersChanged);
     }
+
+
+
     public enum DIStartOptions{
         DIStartAdvertisingAndDetecting,
         DIStartAdvertisingOnly,
@@ -59,19 +64,16 @@ public class Discovery {
     private Boolean mShouldDiscover;
     private Boolean mDisableAndroidLScanner;
     private Map<String, BLEUser> mUsersMap;
-    private Integer mGattTimeoutInterval;
-    private Map<String, Long> mGattConnectionStartTimes;
-    private Map<String, BluetoothGatt> mGattConnections;
+
 
     private Handler mHandler;
     private Runnable mRunnable;
     private DiscoveryCallback mDiscoveryCallback;
     private BluetoothAdapter mBluetoothAdapter;
-    private BluetoothLeScanner mBluetoothLeScanner;
-    private ScanCallback mScanCallback;
-    private BluetoothAdapter.LeScanCallback mLeScanCallback;
-    private BluetoothGattCallback mBluetoothGattCallback;
-    private BroadcastReceiver mAdvertisingFailureReceiver;
+
+    private GattManager mGattManager;
+    private GattManager.GattManagerCallback mGattManagerCallback;
+    private MultiScanner mScanner;
 
     public Discovery(Context context, ParcelUuid uuid, String username, DiscoveryCallback discoveryCallback) {
         this(context, uuid, username, DIStartOptions.DIStartAdvertisingAndDetecting, discoveryCallback);
@@ -84,7 +86,6 @@ public class Discovery {
         mDisableAndroidLScanner = false;
         mPaused = false;
         mUserTimeoutInterval = 5;
-        mGattTimeoutInterval = 30;
         mScanForSeconds = 5;
         mWaitForSeconds = 5;
         mContext = context;
@@ -92,24 +93,7 @@ public class Discovery {
         mUsername = username;
         mDiscoveryCallback = discoveryCallback;
         mUsersMap = new HashMap<>();
-        mGattConnections = new HashMap<>();
-        mGattConnectionStartTimes = new HashMap<>();
         mHandler = new Handler();
-
-        //TODO            // listen for UIApplicationDidEnterBackgroundNotification
-//            [[NSNotificationCenter defaultCenter] addObserver:self
-//            selector:@selector(appDidEnterBackground:)
-//            name:UIApplicationDidEnterBackgroundNotification
-//            object:nil];
-//
-//            // listen for UIApplicationDidEnterBackgroundNotification
-//            [[NSNotificationCenter defaultCenter] addObserver:self
-//            selector:@selector(appWillEnterForeground:)
-//            name:UIApplicationWillEnterForegroundNotification
-//            object:nil];
-//
-//
-        setupAdvertisingFailureReceiver();
 
         switch (startOptions) {
             case DIStartAdvertisingAndDetecting:
@@ -127,13 +111,6 @@ public class Discovery {
                 break;
         }
     }
-
-//
-//TODO    -(void)dealloc {
-//        [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationWillEnterForegroundNotification object:nil];
-//        [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidEnterBackgroundNotification object:nil];
-//    }
-//
 
     public void setPaused(Boolean paused) {
         if (getBluetoothAdapter() == null)
@@ -177,8 +154,11 @@ public class Discovery {
         if (!mShouldDiscover || mPaused)
             return;
 
+        if (getBluetoothAdapter() == null)
+            return;
+
         startDetecting();
-//        Log.v(TAG, "detection cycle started");
+        Log.v(TAG, "detection cycle started");
 
         if (mRunnable != null)
             mHandler.removeCallbacks(mRunnable);
@@ -187,7 +167,7 @@ public class Discovery {
             @Override
             public void run() {
                 stopDetecting();
-//                Log.v(TAG, "detection cycle stopped");
+                Log.v(TAG, "detection cycle stopped");
 
                 Runnable runable = new Runnable() {
                     @Override
@@ -203,59 +183,15 @@ public class Discovery {
     }
 
     public void startDetecting() {
-        if (!getBluetoothAdapter().isEnabled())
-            return;
+        if (mScanner == null)
+            mScanner = new MultiScanner(getBluetoothAdapter(), null, this, true);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && !getShouldDisableAndroidLScanner()) {
-
-            // we only listen to the service that belongs to our uuid
-            // this is important for performance and battery consumption
-            ScanSettings settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-                    .build();
-            List<ScanFilter> filters = new ArrayList<>();
-
-            // filtering by the ServiceUUID prevents us from discovering iOS devices broadcasting in the background
-            // since their serviceUUID gets moved into the 'overflow area'.
-            // we need to find a way to filter also by the manufacturerData to find only devices with our UUID.
-            // more here: https://forums.developer.apple.com/thread/11705
-//            filters.add(new ScanFilter.Builder().setServiceUuid(getUUID()).build());
-
-            // Empty data
-            byte[] manData = new byte[]{1,0,0,0,0,0,0,0,0,0,0,0,0,8,64,0,0};
-
-//            // Data Mask
-            byte[] mask = new byte[]{1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1};
-
-            // Add data array to filters
-            ScanFilter manDataFilter = new ScanFilter.Builder().setManufacturerData(76, manData, mask).build();
-            ScanFilter serviceUUIDFilter = new ScanFilter.Builder().setServiceUuid(getUUID()).build();
-
-//            filters.add(manDataFilter);
-//            filters.add(serviceUUIDFilter);
-
-            getBluetoothLeScanner().startScan(filters, settings, getScanCallback());
-        } else {
-//            UUID[] serviceUUIDs = {getUUID().getUuid()};
-//            getBluetoothAdapter().startLeScan(serviceUUIDs, getLeScanCallback());
-            getBluetoothAdapter().startLeScan(getLeScanCallback());
-        }
-//        Log.v(TAG, "started detecting");
-
+        mScanner.start();
     }
 
     public void stopDetecting(){
-
-        if (!getBluetoothAdapter().isEnabled())
-            return;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && !getShouldDisableAndroidLScanner()) {
-            getBluetoothLeScanner().stopScan(getScanCallback());
-            getBluetoothLeScanner().flushPendingScanResults(getScanCallback());
-        } else {
-            getBluetoothAdapter().stopLeScan(getLeScanCallback());
-        }
-//        Log.v(TAG, "stopped detecting");
+        if (mScanner != null)
+            mScanner.stop();
     }//***END DETECTION METHODS***
 
 
@@ -289,7 +225,7 @@ public class Discovery {
             AdvertiserService.shouldAutoRestart = true;
             if (!AdvertiserService.running) {
                 mContext.startService(getAdvertiserServiceIntent(mContext));
-//                Log.v(TAG, "started advertising");
+                Log.v(TAG, "started advertising");
             }
         }
     }
@@ -298,7 +234,7 @@ public class Discovery {
         if (getBluetoothAdapter().isEnabled() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             AdvertiserService.shouldAutoRestart = false;
             mContext.stopService(getAdvertiserServiceIntent(mContext));
-//            Log.v(TAG, "stopped advertising");
+            Log.v(TAG, "stopped advertising");
         }
     }
 
@@ -387,74 +323,85 @@ public class Discovery {
         return getUsersMap().get(deviceAddress);
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public void myOnScanResult(int callbackType, ScanResult scanResult) {
-        myOnLeScan(scanResult.getDevice(), scanResult.getRssi(), scanResult.getScanRecord().getBytes());
-    }
 
-    public void myOnLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
-//        Log.e(TAG, "found device with address " + device.getAddress());
+    @Override
+    public void onScanResult(BluetoothDevice device, int rssi, byte[] scanRecord) {
 
-        String username = device.getName();
+        if (!device.getAddress().equals("5E:EF:BF:B1:DE:03"))
+            return;
+
         BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+
         if (bleUser == null) {
             bleUser = new BLEUser(device);
             bleUser.setUsername(null);
             bleUser.setIdentified(false);
-
             getUsersMap().put(bleUser.getDeviceAddress(), bleUser);
         }
 
-        boolean shouldConnect = true;
+        // before we report this device to our delegate as a success, two things:
+        // 1) Make sure it contains our service (it's another device advertising with our unique uuid)
+        // 2) Make sure we can read its username
 
+        // We check if we can get a cached copy of the devices service uuids
+        if (!bleUser.isMyService()) {
+            ParcelUuid[] uuids = device.getUuids();
+            if (uuids != null && uuids.length > 0) {
+                for (ParcelUuid uuid : uuids) {
+                    if (uuid.getUuid().equals(mUUID.getUuid())) {
+                        bleUser.setIsMyService(true);
+                        updateList(true);
+                    }
+                }
+            }
+        }
+
+        // We check if we can get the username from the advertisement data,
+        // in case the advertising peer application is working at foreground
         if (!bleUser.isIdentified()) {
-            // We check if we can get the username from the advertisement data,
-            // in case the advertising peer application is working at foreground
-            // if we get the name from advertisement we don't have to establish a peripheral connection
+            String username = device.getName();
+
             if (username != null && username.length() > 0) {
                 bleUser.setUsername(username);
                 bleUser.setIdentified(true);
-
-                // we update our list for callback block
-                updateList();
-                shouldConnect = false;
-            } else if (mGattConnections.get(device.getAddress()) != null ) {
-                Log.v(TAG, device.getAddress() + " - device not identified. connection already in progress");
-
-                long currentTime = new Date().getTime();
-                long startedAt = mGattConnectionStartTimes.get(device.getAddress());
-                if (currentTime - startedAt < mGattTimeoutInterval * 1000) {
-                    shouldConnect = false;
-                } else {
-                    Log.w(TAG, device.getAddress() + " - connection did timeout. will retry");
-                    BluetoothGatt gatt = mGattConnections.get(device.getAddress());
-                    gatt.disconnect();
-                    gatt.close();
-                    mGattConnections.remove(device.getAddress());
-                    mGattConnectionStartTimes.remove(device.getAddress());
-                }
+                updateList(true);
             }
+        }
 
-            if (shouldConnect) {
-                Log.v(TAG, device.getAddress() + " - device not identified. will connect");
-                // nope we could not get the username from CBAdvertisementDataLocalNameKey,
-                // we have to connect to the peripheral and try to get the characteristic data
-                // add we will extract the username from characteristics.
-                if (mBluetoothGattCallback == null)
-                    mBluetoothGattCallback = new MyBluetoothGattCallback();
 
-                BluetoothGatt gatt = device.connectGatt(mContext, true, mBluetoothGattCallback);
-                if (gatt != null) {
-                    mGattConnections.put(device.getAddress(), gatt);
-                    mGattConnectionStartTimes.put(device.getAddress(), new Date().getTime());
-                }
-            }
-        } else {
+        if (bleUser.isMyService() && bleUser.isIdentified()) {
             Log.v(TAG, device.getAddress() + " - device is identified");
+        } else {
+            if (mGattManager == null)
+                mGattManager = new GattManager(mContext, mUUID, this);
+
+            mGattManager.identify(device);
         }
         bleUser.setRssi(rssi);
         bleUser.setUpdateTime(new Date().getTime());
-    }//***END METHODS TO PROCESS SCAN RESULTS***
+    }
+
+    @Override
+    public void onScanFailed(int errorCode) {
+
+    }
+
+    @Override
+    public void didIdentify(BluetoothDevice device, String username, ParcelUuid uuid) {
+        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+        bleUser.setUsername(username);
+        boolean isMyService = uuid.getUuid().equals(mUUID.getUuid());
+        bleUser.setIsMyService(isMyService);
+        updateList(true);
+    }
+
+
+    @Override
+    public void failedToMatchService(BluetoothDevice device) {
+        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+        bleUser.setIsMyService(false);
+    }
+
 
     //***BEGIN GETTERS AND SETTERS**
     public String getUsername() {
@@ -513,175 +460,4 @@ public class Discovery {
         return mBluetoothAdapter;
     }
 
-
-    private BluetoothLeScanner getBluetoothLeScanner() {
-        if (mBluetoothLeScanner == null) {
-            mBluetoothLeScanner = getBluetoothAdapter().getBluetoothLeScanner();
-        }
-        return mBluetoothLeScanner;
-    }
-
-
-    private ScanCallback getScanCallback() {
-        if (mScanCallback == null) {
-            mScanCallback = new MyScanCallback();
-        }
-        return mScanCallback;
-    }
-
-    private BluetoothAdapter.LeScanCallback getLeScanCallback() {
-        if (mLeScanCallback == null) {
-            mLeScanCallback = new BluetoothAdapter.LeScanCallback() {
-                @Override
-                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
-                    myOnLeScan(device, rssi, scanRecord);
-                }
-            };
-        }
-        return mLeScanCallback;
-    }
-
-    public void setupAdvertisingFailureReceiver() {
-        if (mAdvertisingFailureReceiver == null) {
-            this.mAdvertisingFailureReceiver = new BroadcastReceiver() {
-
-                /**
-                 * Receives Advertising error codes from {@code AdvertiserService} and displays error messages
-                 * to the user. Sets the advertising toggle to 'false.'
-                 */
-                @Override
-                public void onReceive(Context context, Intent intent) {
-
-                    int errorCode = intent.getIntExtra(AdvertiserService.ADVERTISING_FAILED_EXTRA_CODE, -1);
-
-                    switch (errorCode) {
-                        case AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED:
-                            Log.e(TAG, "Advertise failed: already started");
-                            break;
-                        case AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE:
-                            Log.e(TAG, "Advertise failed: data too large");
-                            break;
-                        case AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED:
-                            Log.e(TAG, "Advertise failed: feature unsupported");
-                            break;
-                        case AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR:
-                            Log.e(TAG, "Advertise failed: internal error");
-                            break;
-                        case AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS:
-                            Log.e(TAG, "Advertise failed: too many advertisers");
-                            break;
-                    }
-                }
-            };
-        }
-    }
-
-
-
-    private class MyBluetoothGattCallback extends BluetoothGattCallback {
-//        @Override
-//        public void onCharacteristicChanged(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic) {
-//            Log.v(TAG, "BluetoothGattCallback characteristicChanged: " + characteristic);
-//            // this will get called anytime you perform a read or write characteristic operation
-//        }
-
-        @Override
-        public void onConnectionStateChange(final BluetoothGatt gatt, final int status, final int newState) {
-
-            // this will get called when a device connects or disconnects
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.v(TAG, gatt.getDevice().getAddress() + " - connection state changed: state connected!");
-
-                if (!gatt.discoverServices()) {
-                    gatt.disconnect();
-                }
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.v(TAG, gatt.getDevice().getAddress() + " - connection state changed: state disconnected!");
-
-                gatt.close();
-                mGattConnections.remove(gatt.getDevice().getAddress());
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
-            // this will get called after the client initiates a BluetoothGatt.discoverServices() call
-            BluetoothGattService service = gatt.getService(getUUID().getUuid());
-
-            if (service == null)
-                return;
-
-            List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
-            Boolean isMyService = false;
-            for (BluetoothGattCharacteristic characteristic : characteristics) {
-                if (characteristic.getUuid().equals(getUUID().getUuid())) {
-                    gatt.readCharacteristic(characteristic);
-                    isMyService = true;
-                }
-            }
-            if (!isMyService) {
-                Log.v(TAG, gatt.getDevice().getAddress() + " - NOT My service. will disconnect");
-                gatt.disconnect();
-                BLEUser user = userWithDeviceAddress(gatt.getDevice().getAddress());
-                user.setIdentified(true);
-                user.setIsMyService(false);
-            }
-        }
-
-        @Override
-        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.getUuid().equals(getUUID().getUuid())) {
-                String value = characteristic.getStringValue(0);
-
-                // if the value is not nil, we found our username!
-                if (value != null && value.length() > 0) {
-                    BLEUser user = userWithDeviceAddress(gatt.getDevice().getAddress());
-                    user.setUsername(value);
-                    user.setIdentified(true);
-                    user.setIsMyService(true);
-                    updateList();
-
-                    // cancel the subscription to our characteristic
-                    gatt.setCharacteristicNotification(characteristic, false);
-                    // and disconnect from the peripehral
-                    gatt.disconnect();
-
-                }
-            }
-        }
-    }
-
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    private class MyScanCallback extends ScanCallback {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            myOnScanResult(callbackType, result);
-        }
-
-        @Override
-        public void onBatchScanResults(List<ScanResult> results) {
-            Log.v(TAG, "ScanCallback batch results: " + results);
-            for (ScanResult r : results) {
-                myOnScanResult(-1, r);
-            }
-        }
-
-        @Override
-        public void onScanFailed(int errorCode) {
-            switch (errorCode) {
-                case ScanCallback.SCAN_FAILED_ALREADY_STARTED:
-                    Log.e(TAG, "Scan failed: already started");
-                    break;
-                case ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
-                    Log.e(TAG, "Scan failed: app registration failed");
-                    break;
-                case ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED:
-                    Log.e(TAG, "Scan failed: feature unsupported");
-                    break;
-                case ScanCallback.SCAN_FAILED_INTERNAL_ERROR:
-                    Log.e(TAG, "Scan failed: internal error");
-                    break;
-            }
-        }
-    }
 }
