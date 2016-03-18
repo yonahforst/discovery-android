@@ -262,7 +262,7 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
         // remove unidentified users and users who dont belong to our service
         ArrayList<BLEUser> discardedItems = new ArrayList<>();
         for (BLEUser user : users) {
-            if (!user.isIdentified() || !user.isMyService()) {
+            if (!user.isIdentified()) {
                 discardedItems.add(user);
             }
         }
@@ -327,9 +327,6 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
     @Override
     public void onScanResult(BluetoothDevice device, int rssi, byte[] scanRecord) {
 
-        if (!device.getAddress().equals("5E:EF:BF:B1:DE:03"))
-            return;
-
         BLEUser bleUser = userWithDeviceAddress(device.getAddress());
 
         if (bleUser == null) {
@@ -344,7 +341,7 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
         // 2) Make sure we can read its username
 
         // We check if we can get a cached copy of the devices service uuids
-        if (!bleUser.isMyService()) {
+        if (bleUser.isMyService() == null) {
             ParcelUuid[] uuids = device.getUuids();
             if (uuids != null && uuids.length > 0) {
                 for (ParcelUuid uuid : uuids) {
@@ -358,25 +355,37 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
 
         // We check if we can get the username from the advertisement data,
         // in case the advertising peer application is working at foreground
-        if (!bleUser.isIdentified()) {
+        if (bleUser.getUsername() == null) {
             String username = device.getName();
 
             if (username != null && username.length() > 0) {
                 bleUser.setUsername(username);
-                bleUser.setIdentified(true);
                 updateList(true);
             }
         }
 
+        //if you have the username and a boolean value for isMyService, you have enough to identify the user
+        if (bleUser.isMyService() != null && bleUser.getUsername() != null) {
+            if (bleUser.isMyService()) {
+                bleUser.setIdentified(true);
+            }
+        }
 
-        if (bleUser.isMyService() && bleUser.isIdentified()) {
+
+        if (bleUser.isIdentified()) {
+            /// great! we know everything we need to about this service. just update the rssi and time and we're done
             Log.v(TAG, device.getAddress() + " - device is identified");
-        } else {
+        } else if (bleUser.isMyService() == null) {
+            // ok, maybe we know the username but we dont know if it's our service, so connect to gatt and check.
             if (mGattManager == null)
                 mGattManager = new GattManager(mContext, mUUID, this);
 
             mGattManager.identify(device);
+        } else if (!bleUser.isMyService()) {
+            /// Ok, this isn't our service, we don't care about it.
+            Log.v(TAG, device.getAddress() + " - device not our service");
         }
+
         bleUser.setRssi(rssi);
         bleUser.setUpdateTime(new Date().getTime());
     }
@@ -390,8 +399,8 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
     public void didIdentify(BluetoothDevice device, String username, ParcelUuid uuid) {
         BLEUser bleUser = userWithDeviceAddress(device.getAddress());
         bleUser.setUsername(username);
-        boolean isMyService = uuid.getUuid().equals(mUUID.getUuid());
-        bleUser.setIsMyService(isMyService);
+        bleUser.setIdentified(true);
+        bleUser.setIsMyService(true);
         updateList(true);
     }
 

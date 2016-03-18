@@ -102,8 +102,9 @@ public class GattManager {
 
                 boolean started = gatt.discoverServices();
 
-                if (!started)
+                if (!started) {
                     gatt.disconnect();
+                }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.v(TAG, gatt.getDevice().getAddress() + " - disconnected...");
                 gatt.close();
@@ -115,6 +116,7 @@ public class GattManager {
         public void onServicesDiscovered(final BluetoothGatt gatt, final int status) {
             // this will get called after the client initiates a BluetoothGatt.discoverServices() call
             BluetoothGattService service = gatt.getService(mServiceUUID.getUuid());
+            Log.v(TAG, gatt.getDevice().getAddress() + " - services discovered");
 
             if (service == null)
                 return;
@@ -125,7 +127,7 @@ public class GattManager {
             for (BluetoothGattCharacteristic characteristic : characteristics) {
                 if (characteristic.getUuid().equals(mServiceUUID.getUuid())) {
                     isMyService = true;
-                    Log.v(TAG, gatt.getDevice().getAddress() + " - found service!");
+                    Log.v(TAG, gatt.getDevice().getAddress() + " - found MY service!");
 
                     gatt.readCharacteristic(characteristic);
                 }

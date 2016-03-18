@@ -21,7 +21,6 @@ public class BLEUser {
         this.mDeviceAddress = device.getAddress();
         this.mRssi = 0;
         this.mEasedProximity = new EasedValue();
-        this.mIsMyService = false;
     }
 
     public Integer convertRSSItoProximity(Integer rssi) {
