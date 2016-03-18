@@ -420,14 +420,14 @@ public class Discovery {
                 updateList();
                 shouldConnect = false;
             } else if (mGattConnections.get(device.getAddress()) != null ) {
-                Log.e(TAG, "device not identified. connection already in progress");
+                Log.v(TAG, device.getAddress() + " - device not identified. connection already in progress");
 
                 long currentTime = new Date().getTime();
                 long startedAt = mGattConnectionStartTimes.get(device.getAddress());
                 if (currentTime - startedAt < mGattTimeoutInterval * 1000) {
                     shouldConnect = false;
                 } else {
-                    Log.e(TAG, "connection did timeout. will retry");
+                    Log.w(TAG, device.getAddress() + " - connection did timeout. will retry");
                     BluetoothGatt gatt = mGattConnections.get(device.getAddress());
                     gatt.disconnect();
                     gatt.close();
@@ -437,7 +437,7 @@ public class Discovery {
             }
 
             if (shouldConnect) {
-                Log.e(TAG, "device not identified. will connect");
+                Log.v(TAG, device.getAddress() + " - device not identified. will connect");
                 // nope we could not get the username from CBAdvertisementDataLocalNameKey,
                 // we have to connect to the peripheral and try to get the characteristic data
                 // add we will extract the username from characteristics.
@@ -451,7 +451,7 @@ public class Discovery {
                 }
             }
         } else {
-            Log.e(TAG, "device is identified");
+            Log.v(TAG, device.getAddress() + " - device is identified");
         }
         bleUser.setRssi(rssi);
         bleUser.setUpdateTime(new Date().getTime());
@@ -591,13 +591,13 @@ public class Discovery {
 
             // this will get called when a device connects or disconnects
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.e(TAG, "connection state changed: state connected!");
+                Log.v(TAG, gatt.getDevice().getAddress() + " - connection state changed: state connected!");
 
                 if (!gatt.discoverServices()) {
                     gatt.disconnect();
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.e(TAG, "connection state changed: state disconnected!");
+                Log.v(TAG, gatt.getDevice().getAddress() + " - connection state changed: state disconnected!");
 
                 gatt.close();
                 mGattConnections.remove(gatt.getDevice().getAddress());
@@ -621,7 +621,7 @@ public class Discovery {
                 }
             }
             if (!isMyService) {
-                Log.e(TAG, "NOT My service. will disconnect");
+                Log.v(TAG, gatt.getDevice().getAddress() + " - NOT My service. will disconnect");
                 gatt.disconnect();
                 BLEUser user = userWithDeviceAddress(gatt.getDevice().getAddress());
                 user.setIdentified(true);
@@ -661,7 +661,7 @@ public class Discovery {
 
         @Override
         public void onBatchScanResults(List<ScanResult> results) {
-            Log.e(TAG, "ScanCallback batch results: " + results);
+            Log.v(TAG, "ScanCallback batch results: " + results);
             for (ScanResult r : results) {
                 myOnScanResult(-1, r);
             }
