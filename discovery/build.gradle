@@ -1,5 +1,29 @@
 apply plugin: 'com.android.library'
 
+ext {
+    bintrayRepo = 'maven'
+    bintrayName = 'discovery'
+
+    publishedGroupId = 'com.joshblour.discovery'
+    libraryName = 'discovery'
+    artifact = 'discovery'
+
+    libraryDescription = 'Android port of https://github.com/omergul123/Discovery'
+
+    siteUrl = 'https://github.com/joshblour/discovery-android'
+    gitUrl = 'https://github.com/joshblour/discovery-android.git'
+
+    libraryVersion = '0.0.4'
+
+    developerId = 'joshblour'
+    developerName = 'Yonah Forst'
+    developerEmail = 'yonaforst@hotmail.com'
+
+    licenseName = 'The Apache Software License, Version 2.0'
+    licenseUrl = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+    allLicenses = ["Apache-2.0"]
+}
+
 android {
     compileSdkVersion 23
     buildToolsVersion "23.0.1"
@@ -21,3 +45,6 @@ android {
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
 }
+
+apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/installv1.gradle'
+apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'

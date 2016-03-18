@@ -1,4 +1,4 @@
-package com.yonahforst.discovery;
+package com.joshblour.discovery;
 
 import org.junit.Test;
 

@@ -1,4 +1,4 @@
-package com.yonahforst.discovery;
+package com.joshblour.discovery;
 
 /**
  * Created by Yonah on 16/10/15.

@@ -1,4 +1,4 @@
-package com.yonahforst.discovery;
+package com.joshblour.discovery;
 
 import android.annotation.TargetApi;
 import android.bluetooth.BluetoothAdapter;
@@ -31,7 +31,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Created by Yonah on 15/10/15.

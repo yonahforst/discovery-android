@@ -1,8 +1,6 @@
-package com.yonahforst.discovery;
+package com.joshblour.discovery;
 
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.le.ScanRecord;
-import android.bluetooth.le.ScanResult;
 
 /**
  * Created by Yonah on 15/10/15.
