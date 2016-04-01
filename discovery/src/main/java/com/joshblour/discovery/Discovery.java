@@ -319,15 +319,8 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
 
     }
 
-    private BLEUser userWithDeviceAddress(String deviceAddress) {
-        return getUsersMap().get(deviceAddress);
-    }
-
-
-    @Override
-    public void onScanResult(BluetoothDevice device, int rssi, byte[] scanRecord) {
-
-        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+    private BLEUser userForDevice(BluetoothDevice device) {
+        BLEUser bleUser = getUsersMap().get(device.getAddress());
 
         if (bleUser == null) {
             bleUser = new BLEUser(device);
@@ -335,6 +328,14 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
             bleUser.setIdentified(false);
             getUsersMap().put(bleUser.getDeviceAddress(), bleUser);
         }
+
+        return bleUser;
+    }
+
+    @Override
+    public void onScanResult(BluetoothDevice device, int rssi, byte[] scanRecord) {
+
+        BLEUser bleUser = userForDevice(device);
 
         // before we report this device to our delegate as a success, two things:
         // 1) Make sure it contains our service (it's another device advertising with our unique uuid)
@@ -397,7 +398,7 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
 
     @Override
     public void didIdentify(BluetoothDevice device, String username, ParcelUuid uuid) {
-        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+        BLEUser bleUser = userForDevice(device);
         bleUser.setUsername(username);
         bleUser.setIdentified(true);
         bleUser.setIsMyService(true);
@@ -407,7 +408,7 @@ public class Discovery implements MultiScanner.MultiScannerCallback, GattManager
 
     @Override
     public void failedToMatchService(BluetoothDevice device) {
-        BLEUser bleUser = userWithDeviceAddress(device.getAddress());
+        BLEUser bleUser = userForDevice(device);
         bleUser.setIsMyService(false);
     }
 

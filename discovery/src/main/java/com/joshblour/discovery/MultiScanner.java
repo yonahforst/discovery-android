@@ -21,8 +21,8 @@ import java.util.UUID;
  * The purpose of this class is to abstract the two types of scanning that we support
  * Pre-Lollipop and Lollipop+
  *
- * You specify which type of scanning you want when you initiate the class,
- * while we provide a consistent callback interface for both types of scanning
+ * You specify which type of scanning you want when you initiate the class.
+ * We provide a consistent callback interface for both types of scanning
  *
  * You can optionally filter by a serviceUUID.
  * Note: specifying the service uuid will prevent discovery of ios apps in the background
