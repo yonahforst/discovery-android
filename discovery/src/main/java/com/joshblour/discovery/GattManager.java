@@ -7,6 +7,8 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelUuid;
 import android.util.Log;
 
@@ -33,7 +35,7 @@ public class GattManager {
     private ParcelUuid mServiceUUID;
     private GattManagerCallback mCallback;
     private Context mContext;
-    private MyBluetoothGattCallback mMyBluetoothGattCallback;
+    private final MyBluetoothGattCallback mMyBluetoothGattCallback = new MyBluetoothGattCallback();
 
     public GattManager(Context context, ParcelUuid serviceUUID, GattManagerCallback callback) {
         mContext = context;
@@ -44,7 +46,6 @@ public class GattManager {
         mGattConnectionStartTimes = new HashMap<>();
         mGattTimeoutInterval = 30;
 
-        mMyBluetoothGattCallback = new MyBluetoothGattCallback();
     }
 
     // call this method to try to identify a device.
@@ -52,8 +53,8 @@ public class GattManager {
     // if a service matching ours is found. the callback didMatchService is called and we try to read the characteristics
     // if we can read the characteristic matching our service, the callback didIdentify is called with the username
     // if no service matching ours is found, the callback failedToMatchService is called.
-    public void identify(BluetoothDevice device) {
-        boolean shouldConnect;
+    public void identify(final BluetoothDevice device) {
+        boolean shouldConnect = false;
 
         // first check if there are any existing connection attempts in progress.
         // If there are, check to see if they have timed out.
@@ -81,13 +82,18 @@ public class GattManager {
         }
 
         if (shouldConnect) {
-            BluetoothGatt gatt = device.connectGatt(mContext, true, mMyBluetoothGattCallback);
-
-            if (gatt != null) {
-                Log.v(TAG, device.getAddress() + " - attempted connection");
-                mGattConnections.put(device.getAddress(), gatt);
-                mGattConnectionStartTimes.put(device.getAddress(), new Date().getTime());
-            }
+            Handler handler = new Handler(Looper.getMainLooper());
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    BluetoothGatt gatt = device.connectGatt(mContext, false, mMyBluetoothGattCallback);
+                    if (gatt != null) {
+                        Log.v(TAG, device.getAddress() + " - attempted connection");
+                        mGattConnections.put(device.getAddress(), gatt);
+                        mGattConnectionStartTimes.put(device.getAddress(), new Date().getTime());
+                    }
+                }
+            });
         }
 
     }
@@ -109,6 +115,10 @@ public class GattManager {
                 Log.v(TAG, gatt.getDevice().getAddress() + " - disconnected...");
                 gatt.close();
                 mGattConnections.remove(gatt.getDevice().getAddress());
+                mGattConnectionStartTimes.remove(gatt.getDevice().getAddress());
+
+            } else {
+                Log.v(TAG, gatt.getDevice().getAddress() + " status: " + status);
             }
         }
 
@@ -117,21 +127,22 @@ public class GattManager {
             // this will get called after the client initiates a BluetoothGatt.discoverServices() call
             BluetoothGattService service = gatt.getService(mServiceUUID.getUuid());
             Log.v(TAG, gatt.getDevice().getAddress() + " - services discovered");
-
-            if (service == null)
-                return;
-
-            List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
             Boolean isMyService = false;
 
-            for (BluetoothGattCharacteristic characteristic : characteristics) {
-                if (characteristic.getUuid().equals(mServiceUUID.getUuid())) {
-                    isMyService = true;
-                    Log.v(TAG, gatt.getDevice().getAddress() + " - found MY service!");
+            if (service != null) {
+                List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
 
-                    gatt.readCharacteristic(characteristic);
+                for (BluetoothGattCharacteristic characteristic : characteristics) {
+                    if (characteristic.getUuid().equals(mServiceUUID.getUuid())) {
+                        isMyService = true;
+                        Log.v(TAG, gatt.getDevice().getAddress() + " - found MY service!");
+
+                        gatt.setCharacteristicNotification(characteristic, true);
+                        gatt.readCharacteristic(characteristic);
+                    }
                 }
             }
+
 
             if (!isMyService) {
                 mCallback.failedToMatchService(gatt.getDevice());
@@ -142,21 +153,28 @@ public class GattManager {
 
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.getUuid().equals(mServiceUUID.getUuid())) {
-                String value = characteristic.getStringValue(0);
-                ParcelUuid uuid = new ParcelUuid(characteristic.getUuid());
+            onCharacteristicChanged(gatt, characteristic);
+        }
 
-                // if the value is not nil, we found our username!
-                if (value != null && value.length() > 0) {
-                    Log.v(TAG, gatt.getDevice().getAddress() + " - got username!!");
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            if (characteristic.getUuid().equals(mServiceUUID.getUuid())) {
+                if (characteristic.getValue() != null) {
+                    String value = characteristic.getStringValue(0);
+                    ParcelUuid uuid = new ParcelUuid(characteristic.getUuid());
 
-                    mCallback.didIdentify(gatt.getDevice(), value, uuid);
+                    // if the value is not nil, we found our username!
+                    if (value != null && value.length() > 0) {
+                        Log.v(TAG, gatt.getDevice().getAddress() + " - got username!!");
 
-                    // cancel the subscription to our characteristic
-                    gatt.setCharacteristicNotification(characteristic, false);
-                    // and disconnect from the peripehral
-                    gatt.disconnect();
+                        mCallback.didIdentify(gatt.getDevice(), value, uuid);
 
+                        // cancel the subscription to our characteristic
+                        gatt.setCharacteristicNotification(characteristic, false);
+                        // and disconnect from the peripehral
+                        gatt.disconnect();
+
+                    }
                 }
             }
         }
